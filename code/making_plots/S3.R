@@ -1,9 +1,7 @@
-c_df_covid
-c_df_flu
-c_df_ili
-c_df_rsv
-
 library(dplyr)
+library(ggplot2)
+library(cowplot)
+
 
 c_df_covid <- c_df_covid %>%
   mutate(
@@ -16,15 +14,17 @@ c_df_covid <- c_df_covid %>%
     )
   )
 
+
 avg_all_horizon <- bind_rows(
   c_df_ili %>% mutate(dataset = "wILI"),
   c_df_covid %>% mutate(dataset = "COVID-19"),
   c_df_flu %>% mutate(dataset = "Influenza"),
   c_df_rsv %>% mutate(dataset = "RSV")
-) 
+)
 
 avg_all_horizon <- avg_all_horizon %>%
   mutate(horizon = factor(horizon))
+
 
 manual_colors <- c(
   "Drift (transformed)"    = "#ff7f00",
@@ -47,26 +47,45 @@ p_wis_horizon <- ggplot(
     x = horizon,
     y = mean_wis,
     color = variation,
-    linetype = variation,   # ← ADD THIS
+    linetype = variation,
     group = variation
   )
 ) +
+  
   geom_line(linewidth = 0.6) +
+  
   geom_point(size = 1.8) +
+  
   facet_wrap(~ dataset, ncol = 2, scales = "free_y") +
+  
   scale_color_manual(values = manual_colors) +
-  scale_linetype_manual(values = manual_linetypes) +   # ← ADD THIS
-  labs(x = "Horizon", y = "WIS") +
+  
+  scale_linetype_manual(values = manual_linetypes) +
+  
+  labs(
+    x = "Forecast Horizon",   # Spencer request
+    y = "WIS"
+  ) +
+  
   theme_cowplot() +
+  
   theme(
+    
+    legend.title = element_blank(),   # REMOVE "variation"
+    
     legend.position = "right",
+    
     strip.text = element_text(face = "bold"),
-    panel.grid = element_blank()
+    
+    # Add major grid lines (Spencer request)
+    panel.grid.major = element_line(color = "grey85", linewidth = 0.35),
+    
+    panel.grid.minor = element_blank()
   )
 
 p_wis_horizon
 
-# Save
+
 ggsave(
   "plots/paper/horizon_wis.png",
   plot = p_wis_horizon,

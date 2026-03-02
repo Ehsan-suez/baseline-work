@@ -1,6 +1,6 @@
-
+# ============================================================
 # Load individual plotting scripts (these should create a_df_*)
-
+# ============================================================
 source("code/running_models/flu_individual_plotting.R")
 source("code/running_models/covid_individual_plotting.R")
 source("code/running_models/ili_individual_plotting.R")
@@ -21,9 +21,9 @@ library(grid)
 library(patchwork)
 library(gtable)
 
-
+# =========================
 # Shared theme bundle
-
+# =========================
 theme_text_aes <- list(
   theme_minimal(base_size = 14),
   theme_cowplot(),
@@ -39,9 +39,9 @@ theme_text_aes <- list(
   )
 )
 
-
+# =========================
 # Build combined summary data
-
+# =========================
 avg_all <- bind_rows(
   a_df_ili   %>% mutate(dataset = "wILI"),
   a_df_covid %>% mutate(dataset = "COVID-19"),
@@ -50,9 +50,9 @@ avg_all <- bind_rows(
 )
 
 
-
+# =========================
 # Manual color + linetype mapping (2 colors)
-
+# =========================
 manual_colors <- c(
   "Drift (transformed)"    = "#ff7f00",
   "Drift"                  = "#ff7f00",
@@ -67,12 +67,28 @@ manual_linetypes <- c(
   "Flatline (transformed)" = "solid"
 )
 
+# =========================
+# Force legend (and plotting) order
+# =========================
+legend_order <- c(
+  "Drift",
+  "Drift (transformed)",
+  "Flatline",
+  "Flatline (transformed)"
+)
+
+# reorder the mapping vectors to match the desired order
+manual_colors    <- manual_colors[legend_order]
+manual_linetypes <- manual_linetypes[legend_order]
+
+# ensure df uses same factor order
 avg_all_plot <- avg_all %>%
-  mutate(variation = factor(variation, levels = names(manual_colors)))
-
-
+  mutate(
+    variation = factor(variation, levels = legend_order)
+  )
+# =========================
 # Plot helper
-
+# =========================
 make_summary_plot <- function(df, dataset_name, show_title = FALSE) {
   
   # safety check: variations must match color map
@@ -130,7 +146,7 @@ make_summary_plot <- function(df, dataset_name, show_title = FALSE) {
     color = variation,
     linetype = variation
   )) +
-    geom_line(linewidth = 0.5, na.rm = TRUE) +
+    geom_line(linewidth = 1.0, na.rm = TRUE) +
     geom_vline(xintercept = 10, linetype = "dashed", color = "black") +
     scale_color_manual(values = manual_colors) +
     scale_linetype_manual(values = manual_linetypes) +
@@ -157,8 +173,9 @@ make_summary_plot <- function(df, dataset_name, show_title = FALSE) {
     )
 }
 
-
+# =========================
 # Generate summary plots
+# =========================
 plot_covid <- avg_all_plot %>% filter(dataset == "COVID-19")  %>% make_summary_plot("COVID-19",  show_title = TRUE)
 plot_flu   <- avg_all_plot %>% filter(dataset == "Influenza") %>% make_summary_plot("Influenza", show_title = TRUE)
 plot_wili  <- avg_all_plot %>% filter(dataset == "wILI")      %>% make_summary_plot("wILI",      show_title = TRUE)
@@ -170,8 +187,9 @@ plot_flu   <- plot_flu   + theme(legend.position = "none")
 plot_wili  <- plot_wili  + theme(legend.position = "none")
 plot_rsv   <- plot_rsv   + theme(legend.position = "none")
 
-
+# =========================
 # 2x2 layout (cowplot)
+# =========================
 two_by_two <- plot_grid(
   plot_covid, plot_flu,
   plot_wili,  plot_rsv,
@@ -180,8 +198,11 @@ two_by_two <- plot_grid(
   axis = "tblr"
 )
 
+# =========================
 # Build a standalone legend grob
-
+# =========================
+# Standalone legend grob (right-side)
+# =========================
 legend_df <- tidyr::expand_grid(
   variation = factor(names(manual_colors), levels = names(manual_colors)),
   x = c(1, 2)
@@ -220,8 +241,9 @@ legend_plot <- ggplot(
 
 legend_grob <- gtable::gtable_filter(ggplotGrob(legend_plot), "guide-box")
 
+# =========================
 # Put legend on the RIGHT and center it vertically (middle-right)
-
+# =========================
 legend_centered <- plot_grid(
   NULL,
   legend_grob,
@@ -239,8 +261,12 @@ final_with_legend <- plot_grid(
 
 final_with_legend
 
-# Add ONE global axis labels + A–D tags
 
+
+
+# =========================
+# Add ONE global axis labels + A–D tags
+# =========================
 final <- ggdraw(final_with_legend) +
   # Global Y label
   draw_label(
@@ -266,11 +292,12 @@ final <- ggdraw(final_with_legend) +
 
 final
 
+# =========================
 # Save
-
+# =========================
 ggsave(
   "plots/paper/main_summary.png",
   plot = final,
   height = 6, width = 12,
-  units = "in", dpi = 400, bg = "white"
+  units = "in", dpi = 800, bg = "white"
 )

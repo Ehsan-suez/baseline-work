@@ -1,4 +1,3 @@
-
 library(readr)
 library(dplyr)
 library(tidyr)
@@ -6,9 +5,9 @@ library(ggplot2)
 library(patchwork)
 library(cowplot)
 library(lubridate)
+library(scales)
 
 # Load forecasts (single file)
-
 covid_baseline_forecasts <- read_csv(
   "results/covid/forecasts/covid_baseline_forecasts_2022-01-10.csv",
   show_col_types = FALSE
@@ -32,9 +31,7 @@ covid_fc_us <- covid_baseline_forecasts %>%
     forecast_date   = as.Date(forecast_date)
   )
 
-
 # Load truth (daily) and keep US
-
 truth_covid_daily <- read_csv("data/covid/archive/truth_covid_daily.csv", show_col_types = FALSE)
 
 truth_covid_daily_us <- truth_covid_daily %>%
@@ -44,57 +41,32 @@ truth_covid_daily_us <- truth_covid_daily %>%
   filter(!is.na(value)) %>%
   arrange(target_end_date)
 
-
 # Choose which forecast_date to plot
-
 plot_forecast_date <- as.Date("2022-01-09")
 
-
-# Align truth to weekly (Saturday anchor) up to anchor_date
-
-anchor_date <- as.Date("2022-01-08")
-
-truth_covid_us_weekly <- truth_covid_daily_us %>%
-  filter(
-    target_end_date <= anchor_date,
-    (as.integer(anchor_date - target_end_date) %% 7) == 0
-  )
-
-truth_plot <- truth_covid_us_weekly %>%
+# Truth up to forecast date
+truth_plot <- truth_covid_daily_us %>%
   filter(target_end_date < plot_forecast_date) %>%
   arrange(target_end_date)
 
-truth_fit_w10 <- truth_plot %>% slice_tail(n = 10)
-truth_fit_all <- truth_plot
+truth_fit_w10  <- truth_plot %>% slice_tail(n = 10)
+truth_fit_all  <- truth_plot
+min_plot_date  <- min(truth_plot$target_end_date, na.rm = TRUE)
 
-min_plot_date <- min(truth_plot$target_end_date, na.rm = TRUE)
-
-y_min <- min(
-  truth_plot$value,
-  covid_fc_us %>% filter(forecast_date == plot_forecast_date) %>% pull(value),
-  na.rm = TRUE
-)
-
-y_max <- max(
-  truth_plot$value,
-  covid_fc_us %>% filter(forecast_date == plot_forecast_date) %>% pull(value),
-  na.rm = TRUE
-)
-
-# optional: make the top a nice round number
-y_max <- ceiling(y_max / 1000) * 1000
-
-# consistent breaks in every panel
-y_breaks <- pretty(c(y_min, y_max), n = 6)
-
+y_min <- 0
+y_max <- 40000
+y_breaks <- seq(0, y_max, by = 10000)
 
 model_colors <- c("Flatline" = "#5e3c99", "Drift" = "#b35806")
 model_fills  <- c("Flatline" = "#b2abd2", "Drift" = "#f1a340")
 
 base_theme <- cowplot::theme_cowplot() +
   theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_line(color = "grey80", linewidth = 0.3),
+    panel.grid.minor.y = element_blank(),
+    
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank(),
     
     legend.position = "right",
     legend.title    = element_blank(),
@@ -111,7 +83,6 @@ base_theme <- cowplot::theme_cowplot() +
     plot.title   = element_text(hjust = 0.5, face = "bold", size = 12),
     plot.tag     = element_text(face = "bold", size = 12)
   )
-
 
 make_panel <- function(forecasts, truth, fit_truth, title_text, show_y = TRUE) {
   
@@ -158,19 +129,23 @@ make_panel <- function(forecasts, truth, fit_truth, title_text, show_y = TRUE) {
       expand = expansion(mult = c(0, 0.05))
     ) +
     
+    # Dates written out (e.g., "December 31, 2019")
+    scale_x_date(
+      date_labels = "%B %d, %Y"
+      # Optional: control density
+      # date_breaks = "2 weeks"
+    ) +
+    
     labs(
       title = title_text,
       y = if (show_y) "Hospital admits" else NULL
     ) +
     base_theme
   
-  if (!show_y) p <- p + theme(axis.title.y = element_blank())
   p
 }
 
-
 # Helper: subset forecasts for a panel + map to Drift/Flatline
-
 prep_panel_fc <- function(df, keep_models) {
   df %>%
     filter(
@@ -182,7 +157,6 @@ prep_panel_fc <- function(df, keep_models) {
 }
 
 # Build panels
-
 pA <- prep_panel_fc(covid_fc_us, c("none_sym_w10", "none_nonsym_w10")) %>%
   make_panel(truth_plot, truth_fit_w10,
              title_text = expression(italic(w) == 10),
@@ -193,19 +167,18 @@ pB <- prep_panel_fc(covid_fc_us, c("sqrt_sym_w10", "sqrt_nonsym_w10")) %>%
              title_text = expression(italic(w) == 10 ~ "(Transformed)"),
              show_y = TRUE)
 
+# ✅ CHANGED: show_y = TRUE so C and D have y-axis labels
 pC <- prep_panel_fc(covid_fc_us, c("none_sym_w_all", "none_nonsym_w_all")) %>%
   make_panel(truth_plot, truth_fit_all,
              title_text = expression(italic(w) == "All"),
-             show_y = FALSE)
+             show_y = TRUE)
 
 pD <- prep_panel_fc(covid_fc_us, c("sqrt_sym_w_all", "sqrt_nonsym_w_all")) %>%
   make_panel(truth_plot, truth_fit_all,
              title_text = expression(italic(w) == "All" ~ "(Transformed)"),
-             show_y = FALSE)
-
+             show_y = TRUE)
 
 # Assemble with ONE legend on the right (cowplot, stable)
-
 legend_grob <- cowplot::get_legend(pA + theme(legend.position = "right"))
 
 pA_noleg <- pA + theme(legend.position = "none")
@@ -233,9 +206,7 @@ final_plot <- cowplot::plot_grid(
 
 final_plot
 
-
 # Save
-
 ggsave(
   "plots/paper/conceptual.png",
   plot   = final_plot,

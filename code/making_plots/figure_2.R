@@ -1,3 +1,8 @@
+# =========================
+# FULL SCRIPT (ABCD labels + legend on RIGHT)
+# - wILI panel shows ONLY ~last 5 years AND matches truth + forecast window
+# =========================
+
 library(readr)
 library(dplyr)
 library(tidyverse)
@@ -11,7 +16,9 @@ library(gtable)
 library(lubridate)
 library(scales)
 
+# ============================================================
 # COVID
+# ============================================================
 dir_path <- "results/covid/forecasts"
 
 files <- list.files(
@@ -60,8 +67,9 @@ truth_data_covid <- load_truth(
   locations = "US"
 )
 
-
+# ============================================================
 # Shared plot function
+# ============================================================
 plot_forecast_location <- function(location_forecast, location_truth,
                                    y_label = "Admits",
                                    scale_type = "comma") {
@@ -128,8 +136,9 @@ plot_forecast_location <- function(location_forecast, location_truth,
   
 }
 
+# ============================================================
 # COVID plot
-
+# ============================================================
 retro_covid_plot <- NULL
 
 for (curr_location_name in unique(US_forecast_combined_covid$location)) {
@@ -169,8 +178,9 @@ for (curr_location_name in unique(US_forecast_combined_covid$location)) {
   }
 }
 
+# ============================================================
 # FLU
-
+# ============================================================
 dir_path <- "results/flu/forecasts"
 prefix   <- "flu_baseline_forecasts_"
 
@@ -264,11 +274,13 @@ for (curr_location_name in unique(US_forecast_combined_flu$location)) {
       y_label = "Influenza admits",
       scale_type = "comma"
     ) +
-      scale_x_date(date_breaks = "4 months", date_labels = "%b %Y")
+      scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")
   }
 }
 
+# ============================================================
 # RSV
+# ============================================================
 rsv_path <- "results/rsv/retro_full_final_data_redo.csv"
 rsv_df <- read_csv(rsv_path, show_col_types = FALSE)
 
@@ -343,12 +355,13 @@ for (curr_location_name in unique(US_forecast_combined_rsv$location)) {
       y_label = "RSV admits",
       scale_type = "comma"
     ) +
-      scale_x_date(date_breaks = "6 months", date_labels = "%b %Y")
+      scale_x_date(date_breaks = "12 months", date_labels = "%b %Y")
   }
 }
 
+# ============================================================
 # ILI (wILI) — MODIFIED: show only last ~5 years and MATCH truth + forecast window
-
+# ============================================================
 ili_path <- "results/ili/retro_full.csv"
 ili_df <- read_csv(ili_path, show_col_types = FALSE)
 
@@ -357,7 +370,7 @@ forecast_dates_ili <- ili_df %>%
   arrange(forecast_date) %>%
   pull(forecast_date)
 
-forecast_dates_keep_ili <- forecast_dates_ili[seq(1, length(forecast_dates_ili), by = 10)]
+forecast_dates_keep_ili <- forecast_dates_ili[seq(1, length(forecast_dates_ili), by = 5)]
 
 combined_df_ili <- ili_df %>%
   filter(forecast_date %in% forecast_dates_keep_ili) %>%
@@ -439,9 +452,9 @@ for (curr_location_name in unique(US_forecast_combined_ili$location)) {
   }
 }
 
-
+# ============================================================
 # 4-panel figure with ABCD labels
-
+# ============================================================
 four_panel <- plot_grid(
   retro_covid_plot, retro_flu_plot,
   retro_ili_plot,   retro_rsv_plot,
@@ -454,8 +467,9 @@ four_panel <- plot_grid(
   axis = "tblr"
 )
 
+# ============================================================
 # ONE legend (RIGHT side)
-
+# ============================================================
 manual_colors <- c(
   "Drift"    = "#ff7f00",
   "Flatline" = "#5e3c99"
@@ -500,9 +514,9 @@ final
 ggsave(
   filename = "plots/paper/main_summary_2.png",
   plot = final,
-  dpi = 600,
-  width = 18,
-  height = 7,
+  dpi = 1200,
+  width = 14,
+  height = 6,
   units = "in",
   bg = "white"
 )

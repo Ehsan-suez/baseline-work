@@ -1,15 +1,8 @@
-# ============================================================
-# Figure S8 (RSV): A on top, B & C on bottom with ONE legend
-# ============================================================
-
 library(tidyverse)
 library(lubridate)
 library(stringr)
 library(cowplot)
 
-# ----------------------------
-# 1) Build RSV backfill dataset
-# ----------------------------
 archive_dir <- "data/rsv/archive"
 
 rsv_archive_raw <- list.files(
@@ -58,18 +51,13 @@ rsv_first_vs_final_plotdat <- rsv_first_vs_final %>%
   )
 
 
-# -----------------------------
-# 0) USER SETTINGS
-# -----------------------------
 flu_archive_path <- "data/Influenza/archive"   # <-- change if needed
 
 # If your RSV object already exists in memory, keep this TRUE.
 # If you want to load RSV from disk here, set FALSE and add your RSV load code below.
 rsv_object_already_in_memory <- TRUE
 
-# -----------------------------
-# 1) READ ALL FLU ARCHIVE SNAPSHOTS
-# -----------------------------
+
 flu_files <- list.files(
   flu_archive_path,
   pattern = "^target-hospital-admissions_\\d{4}-\\d{2}-\\d{2}\\.csv$",
@@ -99,9 +87,7 @@ stopifnot(all(c("snapshot_date","target_end_date","location_name","value") %in% 
 message("Flu archive rows: ", nrow(flu_archive))
 message("Flu snapshots: ", dplyr::n_distinct(flu_archive$snapshot_date))
 
-# -----------------------------
-# 2) FIRST VS FINAL (COUNTS)
-# -----------------------------
+
 flu_first_vs_final_plotdat <- flu_archive %>%
   group_by(location_name, target_end_date) %>%
   summarise(
@@ -114,9 +100,7 @@ flu_first_vs_final_plotdat <- flu_archive %>%
   ) %>%
   rename(location = location_name)
 
-# -----------------------------
-# 3) OPTIONAL: FIRST VS FINAL (WEEKLY RATE)
-# -----------------------------
+
 flu_rate_first_vs_final_plotdat <- flu_archive %>%
   group_by(location_name, target_end_date) %>%
   summarise(
@@ -129,11 +113,7 @@ flu_rate_first_vs_final_plotdat <- flu_archive %>%
   ) %>%
   rename(location = location_name)
 
-# -----------------------------
-# 4) RSV OBJECT CHECK (must exist)
 
-
-# Ensure RSV columns match expectation; rename if needed
 # Required columns: location, target_end_date, first_value, final_value, total_revision, abs_revision, pct_revision
 needed_cols <- c("location","target_end_date","first_value","final_value","total_revision","abs_revision","pct_revision")
 missing_rsv <- setdiff(needed_cols, names(rsv_first_vs_final_plotdat))
@@ -142,17 +122,12 @@ if (length(missing_rsv) > 0) {
   stop("RSV object is missing required columns: ", paste(missing_rsv, collapse = ", "))
 }
 
-# -----------------------------
-# 5) COMBINE RSV + FLU
-# -----------------------------
+
 revision_df <- bind_rows(
   rsv_first_vs_final_plotdat %>% mutate(disease = "RSV"),
-  flu_first_vs_final_plotdat %>% mutate(disease = "Flu")
+  flu_first_vs_final_plotdat %>% mutate(disease = "Influenza")
 )
 
-# -----------------------------
-# 6) SUMMARY TABLE (for paper text)
-# -----------------------------
 revision_summary <- revision_df %>%
   group_by(disease) %>%
   summarise(
@@ -167,9 +142,7 @@ revision_summary <- revision_df %>%
 
 print(revision_summary)
 
-# -----------------------------
-# 7) PLOTS: RSV vs Flu revisions
-# -----------------------------
+
 library(ggplot2)
 library(dplyr)
 
@@ -188,7 +161,7 @@ p_pub <- ggplot(plot_df,
   
   geom_boxplot(width = 0.18,
                linewidth = 0.8,
-               outlier.alpha = 0.15) +
+               outlier.shape = NA) +
   
   scale_y_log10(
     breaks = c(1, 10, 100, 1000),
@@ -196,7 +169,7 @@ p_pub <- ggplot(plot_df,
   ) +
   
   scale_fill_manual(values = c(
-    Flu = "#2C6BA0",
+    Influenza = "#2C6BA0",
     RSV = "#D7191C"
   )) +
   
