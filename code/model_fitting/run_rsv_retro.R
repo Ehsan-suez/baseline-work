@@ -38,9 +38,6 @@ truth_rsv_aligned <- truth_rsv %>%
   rename(location = location_name)
 
 
-############################################################
-## Helper: quantile extractor
-############################################################
 get_quantiles_df <- function(predictions, taus) {
   purrr::map_dfr(seq_len(ncol(predictions)), function(h) {
     tibble(
@@ -55,15 +52,11 @@ get_quantiles_df <- function(predictions, taus) {
 }
 
 
-############################################################
 ## Parallel backend (set ONCE)
-############################################################
+
 plan(multisession, workers = max(1, parallel::detectCores() - 1))
 
 
-############################################################
-##List all RSV hospitalization CSVs
-############################################################
 files <- list.files(
   path = "data/rsv/archive",
   pattern = "_rsvnet_hospitalization\\.csv$",
@@ -77,15 +70,11 @@ files
 
 
 ############################################################
-##  Output directories
-############################################################
 dir.create("results/rsv/forecasts", recursive = TRUE, showWarnings = FALSE)
 dir.create("results/rsv/scores",    recursive = TRUE, showWarnings = FALSE)
 
 
-############################################################
-##  MAIN LOOP — process each RSV file
-############################################################
+
 for (file_path in files) {
   
   message("\n==============================")

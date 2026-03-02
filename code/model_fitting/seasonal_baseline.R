@@ -5,7 +5,6 @@ library(mgcv)
 library(MMWRweek)
 library(tibble)
 
-------------------------------------------------------------------------
 
 wrangle_ili_for_kde <- function(ili_data) {
   ili_data %>%
@@ -39,7 +38,7 @@ wrangle_ili_for_kde <- function(ili_data) {
 }
 
 
-# ili_data <- readr::read_csv("path/to/your_ili_data.csv")
+ili_data <- readr::read_csv("data/ili/truth_ili.csv")
 wrangled_ili <- wrangle_ili_for_kde(ili_data)
 
 ## seasonal GAM forecast function 
@@ -280,3 +279,5 @@ readr::write_csv(
   score_season_2022_2023,
   "results/seasonal/scores/seasonal_gam_scores_2022_2023.csv"
 )
+
+#do it for each season and later combine them into one csv
