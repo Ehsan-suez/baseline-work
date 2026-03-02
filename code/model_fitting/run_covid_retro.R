@@ -70,7 +70,7 @@ plan(multisession, workers = max(1, parallel::detectCores() - 1))
 ## Find archive-matched files
 
 files <- list.files(
-  path   = "data/covid/archive/archive_matched/",
+  path   = "data/covid/archive/archive_daily/",
   pattern = "archived_target_data_\\d{4}-\\d{2}-\\d{2}\\.csv$",
   full.names = TRUE
 ) |> sort()
