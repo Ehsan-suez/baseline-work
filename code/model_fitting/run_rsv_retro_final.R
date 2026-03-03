@@ -1,44 +1,4 @@
-## Project-local dependency bootstrap (renv)
-## - Keeps package versions isolated to this repo
-## - Avoids relying on globally installed package versions
-library(renv)
-
-## Only needed the first time
-# renv::init()
-# renv::install('scoringutils@1.2.2')
-# renv::snapshot()
-if (!file.exists("renv/activate.R")) {
-  stop(
-    "renv is not initialized for this project.\n",
-    "From the project root, run:\n",
-    "  install.packages('renv')\n",
-    "  renv::init()\n",
-    "  renv::install('scoringutils@1.2.2')\n",
-    "  renv::snapshot()\n"
-  )
-}
-source("renv/activate.R")
-
-required_scoringutils_version <- "1.2.2"
-if (!requireNamespace("scoringutils", quietly = TRUE)) {
-  stop(
-    "Package 'scoringutils' is missing from the renv library.\n",
-    "Run: renv::install('scoringutils@",
-    required_scoringutils_version,
-    "'); renv::snapshot()"
-  )
-}
-
-installed_scoringutils_version <- as.character(utils::packageVersion("scoringutils"))
-if (installed_scoringutils_version != required_scoringutils_version) {
-  stop(
-    "Expected scoringutils ", required_scoringutils_version,
-    " but found ", installed_scoringutils_version, ".\n",
-    "Run: renv::install('scoringutils@", required_scoringutils_version,
-    "'); renv::snapshot()"
-  )
-}
-#uses final data from 2025-10-24 (time of analyzing)
+## 0. load libs
 
 library(dplyr)
 library(readr)
@@ -50,18 +10,16 @@ library(furrr)
 library(parallel)
 library(covidHubUtils)
 library(stringr)
+library(lubridate)
 
 theme_set(theme_bw())
 
-# ------------------------------------------------------------
-# Location lookup
-# ------------------------------------------------------------
-locations <- read_csv("data/locations.csv", show_col_types = FALSE)
 
-# ------------------------------------------------------------
-# Truth data (final truth, used for scoring)
-# ------------------------------------------------------------
-truth_rsv <- read_csv("data/rsv/truth_rsv.csv", show_col_types = FALSE)
+# Location lookup
+locations <- read_csv("data/locations.csv")
+
+# Truth data (used for scoring every file)
+truth_rsv <- read_csv("data/rsv/truth_rsv.csv")
 
 truth_rsv_aligned <- truth_rsv %>%
   rename(target_end_date = date) %>%
@@ -82,9 +40,10 @@ truth_rsv_aligned <- truth_rsv %>%
   mutate(value = round(value)) %>%
   rename(location = location_name)
 
-# ------------------------------------------------------------
-# Helper: quantile extractor (kept EXACTLY your style)
-# ------------------------------------------------------------
+
+############################################################
+## 2. Helper: quantile extractor
+############################################################
 get_quantiles_df <- function(predictions, taus) {
   purrr::map_dfr(seq_len(ncol(predictions)), function(h) {
     tibble(
@@ -98,135 +57,78 @@ get_quantiles_df <- function(predictions, taus) {
   })
 }
 
-# ------------------------------------------------------------
-# Parallel backend (set ONCE)
-# ------------------------------------------------------------
-plan(multisession, workers = max(1, parallel::detectCores() - 1))
 
-# ------------------------------------------------------------
-# FINAL DATA: pick the latest file in archive (by filename date)
-# ------------------------------------------------------------
-files <- list.files(
-  path = "data/rsv/archive",
-  pattern = "_rsvnet_hospitalization\\.csv$",
-  full.names = TRUE
-) |> sort()
+############################################################
 
-stopifnot(length(files) > 0)
 
-file_path <- tail(files, 1)  # <-- FINAL / latest archive snapshot
-message("Using FINAL RSV file: ", file_path)
+forecast_dates <- truth_rsv_aligned |>
+  filter(
+    year(target_end_date) >= 2022,
+    month(target_end_date) %in% c(10,11,12,1,2,3,4),
+    target_end_date < as.Date("2025-05-01")
+  ) |>
+  pull(target_end_date) |>
+  unique() |>
+  sort()
 
-# Optional: still extract date from filename for naming outputs
-issue_date <- as.Date(str_extract(file_path, "\\d{4}-\\d{2}-\\d{2}"))
-message("Final file date detected: ", issue_date)
+locs <- unique(truth_rsv_aligned$location)
 
-# ------------------------------------------------------------
-# Output directories
-# ------------------------------------------------------------
-dir.create("results/rsv/forecasts", recursive = TRUE, showWarnings = FALSE)
-dir.create("results/rsv/scores",    recursive = TRUE, showWarnings = FALSE)
+# Hyperparams
+transformations <- c("none", "sqrt")
+offsets <- c(1)
+sym_opts <- c(TRUE, FALSE)
+taus <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
 
-# ============================================================
-# MAIN — process FINAL RSV file only
-# ============================================================
-message("\n==============================")
-message("Processing FINAL file: ", file_path)
-message("==============================")
+plan(multisession)
 
-tryCatch({
-  
-  # ----------------------------------------------------------
-  # Load FINAL RSV data
-  # ----------------------------------------------------------
-  df <- read_csv(
-    file_path,
-    col_types = cols(
-      location    = col_character(),
-      date        = col_date(),
-      age_group   = col_character(),
-      target      = col_character(),
-      value       = col_double(),
-      population  = col_double()
-    ),
-    show_col_types = FALSE
-  )
-  
-  df <- df %>%
-    left_join(locations %>% select(location, location_name),
-              by = "location")
-  
-  # ----------------------------------------------------------
-  # Filter RSV rows needed for baseline modeling (FINAL data)
-  # ----------------------------------------------------------
-  filtered_rsv <- df %>%
-    filter(
-      age_group == "0-130",
-      target == "inc hosp",
-      date >= as.Date("2022-01-01"),
-      location != "37"
-    ) %>%
-    mutate(value = round(value)) %>%
-    select(-age_group)
-  
-  if (nrow(filtered_rsv) == 0) {
-    stop("⚠ No usable data in the FINAL file after filtering.")
-  }
-  
-  locs <- sort(unique(filtered_rsv$location_name))
-  message("Locations found: ", paste(locs, collapse = ", "))
-  
-  # ----------------------------------------------------------
-  # Baseline model parameter grid (global)
-  # ----------------------------------------------------------
-  transformations <- c("none", "sqrt")
-  offsets <- 1
-  sym_opts <- c(TRUE, FALSE)
-  taus <- c(0.01, 0.025, seq(0.05, 0.95, 0.05), 0.975, 0.99)
-  
-  # ----------------------------------------------------------
-  # Fit baseline models for ALL LOCATIONS (parallel)
-  # ----------------------------------------------------------
-  baseline_combined <- future_map_dfr(
-    locs,
-    function(loc) {
+# ----------------------------
+# 2. MAIN LOOP: all dates × all locations
+# ----------------------------
+
+baseline_all <- future_map_dfr(
+  forecast_dates,
+  function(fdate) {
+    message("Running forecast for date: ", fdate)
+    
+    # Use only truth up to fdate
+    truth_upto_fdate <- truth_rsv_aligned |>
+      filter(target_end_date <= fdate)
+    
+    # Loop over locations
+    map_dfr(locs, function(loc) {
       
-      loc_df <- filtered_rsv %>%
-        filter(location_name == loc) %>%
-        arrange(date)
+      loc_df <- truth_upto_fdate |>
+        filter(location == loc) |>
+        arrange(target_end_date)
       
+      # Skip if insufficient history
       if (sum(!is.na(loc_df$value)) < 10) {
-        message("Skipping ", loc, " — too few data points.")
+        message("Skipping ", loc)
         return(NULL)
       }
       
       full_window <- sum(!is.na(loc_df$value))
-      
-      # Keep EXACT same window logic you used in as-of script
       window_sizes <- unique(c(5:53, full_window))
-      # window_sizes <- c(10, 50, full_window)  # optional testing
       
-      # Build model grid
+      
       param_grid <- expand.grid(
-        transformation   = transformations,
+        transformation = transformations,
         transform_offset = offsets,
-        symmetrize       = sym_opts,
-        window_size      = window_sizes,
+        symmetrize = sym_opts,
+        window_size = window_sizes,
         stringsAsFactors = FALSE
-      )
-      
-      # IMPORTANT: Fix model_id formatting (no double underscore)
-      param_grid <- param_grid %>%
+      ) |>
         mutate(
           model_id = paste0(
             transformation, "_",
             ifelse(symmetrize, "sym", "nonsym"), "_w",
-            ifelse(window_size == full_window, "all", window_size)
+            ifelse(window_size == full_window, "_all", window_size)
           )
         )
       
-      # Fit all variants for this location
-      purrr::map_dfr(seq_len(nrow(param_grid)), function(i) {
+      
+      # Run all baseline configs
+      map_dfr(seq_len(nrow(param_grid)), function(i) {
         cfg <- param_grid[i, ]
         
         fit <- fit_simple_ts(
@@ -247,149 +149,102 @@ tryCatch({
           force_nonneg = TRUE
         )
         
-        get_quantiles_df(preds, taus) %>%
+        get_quantiles_df(preds, taus) |>
           mutate(
             transformation = cfg$transformation,
-            symmetrize     = cfg$symmetrize,
-            window_size    = cfg$window_size,
-            model          = cfg$model_id,
-            location       = loc,
-            reference_date = max(loc_df$date[!is.na(loc_df$value)])
+            transform_offset = cfg$transform_offset,
+            symmetrize = cfg$symmetrize,
+            window_size = cfg$window_size,
+            model = cfg$model_id,
+            location = loc,
+            reference_date = fdate
           )
       })
-    },
-    .progress = TRUE,
-    .options = furrr::furrr_options(seed = TRUE)
+    })
+  },
+  .progress = TRUE,
+  .options = furrr::furrr_options(seed = TRUE)
+)
+
+# ----------------------------
+# 3. Format final output
+# ----------------------------
+
+baseline_all_comb <- baseline_all |>
+  mutate(
+    forecast_date      = reference_date,
+    target_variable    = "inc hosp rsv",
+    target_end_date    = reference_date + horizon * 7L,
+    type               = "quantile",
+    temporal_resolution = "wk"
+  ) %>%
+  select(
+    reference_date, forecast_date, horizon,
+    target_variable, target_end_date,
+    type, quantile, value, model,
+    temporal_resolution, window_size, location
+  ) 
+
+baseline_all_comb <- baseline_all_comb %>%
+  distinct(
+    reference_date, forecast_date, location, horizon,
+    target_variable, target_end_date,
+    type, quantile, model, window_size,
+    .keep_all = TRUE
   )
-  
-  if (nrow(baseline_combined) == 0) {
-    stop("⚠ No baseline results produced — stopping.")
-  }
-  
-  # ----------------------------------------------------------
-  # Format forecasts
-  # ----------------------------------------------------------
-  baseline_combined <- baseline_combined %>%
-    mutate(
-      forecast_date       = reference_date,
-      target_variable     = "inc hosp rsv",
-      target_end_date     = reference_date + horizon * 7L,
-      type                = "quantile",
-      temporal_resolution = "wk"
-    ) %>%
-    select(
-      reference_date, forecast_date, horizon,
-      target_variable, target_end_date,
-      type, quantile, value, model,
-      temporal_resolution, window_size, location
+
+baseline_all_comb %>%
+  group_by(model, location, horizon) %>%
+  summarise(nonmonotonic = any(diff(value[order(quantile)]) < 0)) %>%
+  filter(nonmonotonic)
+
+write_csv(
+  baseline_all_comb,
+  "results/rsv/retro_full_final_data_redo.csv"
+)
+
+
+baseline_all_comb <- read_csv("results/rsv/retro_full_final_data_redo.csv")
+
+
+ref_dates <- unique(baseline_all_comb$reference_date)
+length(ref_dates)
+
+library(dplyr)
+library(purrr)
+library(scoringutils)
+
+
+
+library(purrr)
+library(dplyr)
+library(readr)
+
+dir.create("results/rsv/scores_redo", recursive = TRUE, showWarnings = FALSE)
+
+walk(
+  ref_dates,
+  function(fdate) {
+    message("Scoring date: ", fdate)
+    
+    df <- baseline_all_comb %>% filter(reference_date == fdate)
+    if (nrow(df) == 0) return(NULL)
+    
+    sc <- score_forecasts(
+      df,
+      truth_rsv_aligned,
+      return_format = "wide",
+      metrics = c("abs_error","wis","wis_components",
+                  "interval_coverage","quantile_coverage"),
+      use_median_as_point = TRUE
+    ) %>% mutate(reference_date = fdate)
+    
+    write_csv(
+      sc,
+      paste0("results/rsv/scores_redo/rsv_baseline_scores_", fdate, ".csv")
     )
-  
-  # ----------------------------------------------------------
-  # Score forecasts vs FINAL truth
-  # ----------------------------------------------------------
-  scores <- covidHubUtils::score_forecasts(
-    baseline_combined,
-    truth_rsv_aligned,
-    return_format = "wide",
-    metrics = c(
-      "abs_error", "wis", "wis_components",
-      "interval_coverage", "quantile_coverage"
-    ),
-    use_median_as_point = TRUE
-  )
-  
-  # ----------------------------------------------------------
-  forecast_path <- paste0(
-    "results/rsv/forecasts/rsv_baseline_forecasts_final_",
-    issue_date,
-    ".csv"
-  )
-  
-  scores_path <- paste0(
-    "results/rsv/scores/rsv_baseline_scores_final_",
-    issue_date,
-    ".csv"
-  )
-  
-  write_csv(baseline_combined, forecast_path)
-  write_csv(scores,           scores_path)
-  
-  message("✔ Saved: ", forecast_path)
-  message("✔ Saved: ", scores_path)
-  
-}, error = function(e) {
-  message("❌ Error processing FINAL file ", file_path, ": ", e)
-})
+  }
+)
 
-message("\n🎉 DONE: RSV baseline pipeline complete (FINAL data only)!")
 
-# ------------------------------------------------------------
-# Optional sanity check (same as your style) — uncomment to use
-# ------------------------------------------------------------
-# scores <- read_csv("results/rsv/scores/rsv_baseline_scores_final_2025-02-14.csv")
-#
-# scores_summary <- scores %>%
-#   dplyr::group_by(model, horizon) %>%
-#   dplyr::summarise(wis = mean(wis), .groups = "drop")
-#
-# plt_rsv_wk <- ggplot(scores_summary, aes(x = factor(horizon), y = model, fill = wis)) +
-#   geom_tile(color = "white") +
-#   scale_fill_viridis_c(option = "plasma", direction = -1) +
-#   labs(
-#     title = "WIS",
-#     x = "Horizon (weeks ahead)",
-#     y = "Model",
-#     fill = "Mean WIS"
-#   ) +
-#   theme_minimal(base_size = 14) +
-#   theme(
-#     axis.text.x = element_text(face = "bold"),
-#     axis.text.y = element_text(face = "bold"),
-#     plot.title = element_text(hjust = 0.5, face = "bold", size = 18)
-#   )
-# print(plt_rsv_wk)
-#
-# reference_model <- "sqrt_sym_wall"
-#
-# scores_summary2 <- scores_summary %>%
-#   group_by(horizon) %>%
-#   mutate(
-#     ref_wis = wis[model == reference_model],
-#     rwis = wis / ref_wis
-#   ) %>%
-#   ungroup()
-#
-# scores_summary3 <- scores_summary2 %>%
-#   tidyr::separate(
-#     model,
-#     into = c("transform", "symmetry", "window"),
-#     sep = "_",
-#     extra = "merge"
-#   ) %>%
-#   mutate(
-#     window = factor(window, levels = c("w10", "w50", "wall")),
-#     transform = factor(transform, levels = c("none", "sqrt")),
-#     symmetry = factor(symmetry, levels = c("nonsym", "sym"))
-#   )
-#
-# plt_rsv_wk_rwis <- ggplot(scores_summary3, aes(
-#   x = factor(horizon),
-#   y = window,
-#   fill = rwis
-# )) +
-#   geom_tile(color = "white", linewidth = 0.3) +
-#   facet_grid(transform ~ symmetry) +
-#   scale_fill_viridis_c(
-#     option = "magma",
-#     direction = -1,
-#     limits = c(0.8, max(scores_summary3$rwis, na.rm = TRUE)),
-#     oob = scales::squish
-#   ) +
-#   labs(
-#     title = "Relative WIS",
-#     x = "Horizon (weeks ahead)",
-#     y = "Window size",
-#     fill = "rWIS"
-#   ) +
-#   theme_minimal(base_size = 14)
-# print(plt_rsv_wk_rwis)
+
