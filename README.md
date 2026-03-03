@@ -190,8 +190,8 @@ The distinction between as-of and finalized data is particularly important for R
 
 ---
 
-## Author
+**Author:** Ehsan Suez  
+PhD Candidate, University of Georgia  
+Email: ehsan.suez@uga.edu
 
-Ehsan Suez
-PhD Candidate, University of Georgia
-ehsan.suez@uga.edu
+---
