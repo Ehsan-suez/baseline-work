@@ -1,115 +1,49 @@
-## Project-local dependency bootstrap (renv)
-## - Keeps package versions isolated to this repo
-## - Avoids relying on globally installed package versions
-library(renv)
-
-## Only needed the first time
-# renv::init()
-# renv::install('scoringutils@1.2.2')
-# renv::snapshot()
-if (!file.exists("renv/activate.R")) {
-  stop(
-    "renv is not initialized for this project.\n",
-    "From the project root, run:\n",
-    "  install.packages('renv')\n",
-    "  renv::init()\n",
-    "  renv::install('scoringutils@1.2.2')\n",
-    "  renv::snapshot()\n"
-  )
-}
-source("renv/activate.R")
-
-required_scoringutils_version <- "1.2.2"
-if (!requireNamespace("scoringutils", quietly = TRUE)) {
-  stop(
-    "Package 'scoringutils' is missing from the renv library.\n",
-    "Run: renv::install('scoringutils@",
-    required_scoringutils_version,
-    "'); renv::snapshot()"
-  )
-}
-
-installed_scoringutils_version <- as.character(utils::packageVersion("scoringutils"))
-if (installed_scoringutils_version != required_scoringutils_version) {
-  stop(
-    "Expected scoringutils ", required_scoringutils_version,
-    " but found ", installed_scoringutils_version, ".\n",
-    "Run: renv::install('scoringutils@", required_scoringutils_version,
-    "'); renv::snapshot()"
-  )
-}
 library(dplyr)
-library(readr)
-library(simplets)
-library(purrr)
-library(tidyr)
-library(ggplot2)
-library(furrr)
-library(parallel)
-library(covidHubUtils)
-library(stringr)
 library(lubridate)
+library(purrr)
+library(furrr)
+library(simplets)
+library(readr)
+library(covidHubUtils)
 
-theme_set(theme_bw())
-
-
-# Location lookup
-locations <- read_csv("data/locations.csv")
-
-# Truth data (used for scoring every file)
-truth_rsv <- read_csv("data/rsv/truth_rsv.csv")
-
-truth_rsv_aligned <- truth_rsv %>%
-  rename(target_end_date = date) %>%
-  filter(
-    age_group == "0-130",
-    target == "inc hosp"
-  ) %>%
-  left_join(
-    locations %>% select(location, location_name),
-    by = "location"
-  ) %>%
-  mutate(
-    target_variable = "inc hosp rsv",
-    model = "truth"
-  ) %>%
-  select(model, target_variable, target_end_date,
-         location_name, value) %>%
-  mutate(value = round(value)) %>%
-  rename(location = location_name)
-
-
-############################################################
-##Helper: quantile extractor
-############################################################
 get_quantiles_df <- function(predictions, taus) {
   purrr::map_dfr(seq_len(ncol(predictions)), function(h) {
+    
+    # raw quantiles
+    q_raw <- quantile(
+      predictions[, h],
+      probs = taus,
+      na.rm = TRUE
+    )
+    
+    # enforce non-negative & monotonic increasing quantiles
+    q_fixed <- pmax(0, cummax(q_raw))
+    
+    # output tibble
     tibble(
       horizon = h,
       quantile = taus,
-      value = pmax(
-        0,
-        ceiling(quantile(predictions[, h], probs = taus, na.rm = TRUE))
-      )
+      value = q_fixed
     )
   })
 }
 
+truth_ili <- read_csv("data/ili/truth_ili.csv")
 
-############################################################
+# ----------------------------
+# 1. Forecast dates to run
+# ----------------------------
 
-
-forecast_dates <- truth_rsv_aligned |>
+forecast_dates <- truth_ili |>
   filter(
-    year(target_end_date) >= 2022,
     month(target_end_date) %in% c(10,11,12,1,2,3,4),
-    target_end_date < as.Date("2025-05-01")
+    year(target_end_date) >= 2014
   ) |>
   pull(target_end_date) |>
   unique() |>
   sort()
 
-locs <- unique(truth_rsv_aligned$location)
+locs <- unique(truth_ili$location)
 
 # Hyperparams
 transformations <- c("none", "sqrt")
@@ -129,7 +63,7 @@ baseline_all <- future_map_dfr(
     message("Running forecast for date: ", fdate)
     
     # Use only truth up to fdate
-    truth_upto_fdate <- truth_rsv_aligned |>
+    truth_upto_fdate <- truth_ili |>
       filter(target_end_date <= fdate)
     
     # Loop over locations
@@ -193,7 +127,7 @@ baseline_all <- future_map_dfr(
             transform_offset = cfg$transform_offset,
             symmetrize = cfg$symmetrize,
             window_size = cfg$window_size,
-            model = cfg$model_id,
+            model_id = cfg$model_id,
             location = loc,
             reference_date = fdate
           )
@@ -204,22 +138,25 @@ baseline_all <- future_map_dfr(
   .options = furrr::furrr_options(seed = TRUE)
 )
 
-#Format final output
+# ----------------------------
+# 3. Format final output
+# ----------------------------
 
 baseline_all_comb <- baseline_all |>
   mutate(
-    forecast_date      = reference_date,
-    target_variable    = "inc hosp rsv",
-    target_end_date    = reference_date + horizon * 7L,
-    type               = "quantile",
+    forecast_date = reference_date,
+    target_variable = "inc wili",
+    target_end_date = reference_date + (horizon * 7L),
+    type = "quantile",
+    model = model_id,
     temporal_resolution = "wk"
-  ) %>%
+  ) |>
   select(
-    reference_date, forecast_date, horizon,
-    target_variable, target_end_date,
+    reference_date, forecast_date, location,
+    horizon, target_variable, target_end_date,
     type, quantile, value, model,
-    temporal_resolution, window_size, location
-  ) 
+    temporal_resolution, window_size
+  )
 
 baseline_all_comb <- baseline_all_comb %>%
   distinct(
@@ -236,11 +173,11 @@ baseline_all_comb %>%
 
 write_csv(
   baseline_all_comb,
-  "results/rsv/retro_full_final_data_redo.csv"
+  "results/ili/retro_full.csv"
 )
 
 
-baseline_all_comb <- read_csv("results/rsv/retro_full_final_data_redo.csv")
+baseline_all_comb <- read_csv("results/ili/retro_full.csv")
 
 
 ref_dates <- unique(baseline_all_comb$reference_date)
@@ -250,13 +187,13 @@ library(dplyr)
 library(purrr)
 library(scoringutils)
 
-
+truth_ili <- read_csv("data/ili/truth_ili.csv")
 
 library(purrr)
 library(dplyr)
 library(readr)
 
-dir.create("results/rsv/scores_redo", recursive = TRUE, showWarnings = FALSE)
+dir.create("results/ili/scores", recursive = TRUE, showWarnings = FALSE)
 
 walk(
   ref_dates,
@@ -268,7 +205,7 @@ walk(
     
     sc <- score_forecasts(
       df,
-      truth_rsv_aligned,
+      truth_ili,
       return_format = "wide",
       metrics = c("abs_error","wis","wis_components",
                   "interval_coverage","quantile_coverage"),
@@ -277,10 +214,11 @@ walk(
     
     write_csv(
       sc,
-      paste0("results/rsv/scores_redo/rsv_baseline_scores_", fdate, ".csv")
+      paste0("results/ili/scores/ili_baseline_scores_", fdate, ".csv")
     )
   }
 )
+
 
 
 
