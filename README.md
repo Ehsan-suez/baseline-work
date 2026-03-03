@@ -1,4 +1,4 @@
-# Baseline Forecasting Benchmark
+# Baseline Respiratory Infectious Diseases Forecasting Benchmark
 
 This repository contains code, data, and results for evaluating how baseline forecasting model specifications affect probabilistic forecast performance across multiple infectious disease surveillance systems:
 
