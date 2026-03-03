@@ -1,3 +1,5 @@
+Baseline Forecasting Benchmark
+
 This repository contains code, data, and results for evaluating how baseline forecasting model specifications affect probabilistic forecast performance across multiple infectious disease surveillance systems:
 
 COVID-19 hospitalizations
@@ -11,6 +13,7 @@ Influenza-like illness (ILI%)
 The study systematically examines how baseline model design choices influence probabilistic forecast evaluation metrics such as the Weighted Interval Score (WIS) and prediction interval coverage.
 
 Repository Structure
+
 baseline-work/
 │
 ├── code/
@@ -50,13 +53,14 @@ baseline-work/
 ├── renv/           # renv project library
 ├── renv.lock       # Locked package versions
 └── baseline-work.Rproj
+
 Reproducibility and Environment Control
 
 This project uses renv for strict, project-local dependency management.
 
 All forecast evaluation was conducted using:
 
-R (version X.X.X)
+R (version 4.3.0)
 
 scoringutils version 1.2.2
 
@@ -75,7 +79,6 @@ This prevents accidental use of globally installed or updated package versions.
 Initial Setup (One Time Only)
 
 After cloning the repository, from the project root run:
-
 install.packages("renv")   # if not already installed
 renv::init()
 renv::install("scoringutils@1.2.2")
@@ -84,12 +87,12 @@ renv::snapshot()
 After this initial setup, scripts can be run directly.
 
 If packages are missing or the environment needs to be restored:
-
 renv::restore()
+
 Execution Workflow
 Step 1 — (Optional) Refresh Archived COVID Data
 
-If needed, regenerate archived COVID-19 data by issue date:
+To regenerate archived COVID-19 data by issue date:
 
 code/model_fitting/pull_cov_data_with_version.R
 
@@ -183,9 +186,3 @@ RSV analyses include both real-time (“as-of”) and finalized data to assess t
 ILI analyses use finalized percent wILI values.
 
 The distinction between as-of and finalized data is particularly important for RSV due to substantial backfill and revision.
-
-## Author
-
-Ehsan Suez  
-PhD Candidate, University of Georgia
-contact: ehsan.suez@uga.edu
