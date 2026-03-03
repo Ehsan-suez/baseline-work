@@ -1,18 +1,188 @@
-# baseline-work
-# Baseline Forecasting Benchmark
+This repository contains code, data, and results for evaluating how baseline forecasting model specifications affect probabilistic forecast performance across multiple infectious disease surveillance systems:
 
-This repository contains code, data, and results for evaluating baseline forecasting model versions across multiple infectious disease datasets (COVID-19, Influenza, RSV, and ILI).
+COVID-19 hospitalizations
 
-## Structure
+Influenza hospitalizations
 
-- `code/` – model fitting and plotting scripts
-- `data/` – input datasets
-- `results/` – forecast outputs and evaluation results
-- `plots/` – manuscript figures
+RSV hospitalizations
 
-## Reproducibility
+Influenza-like illness (ILI%)
 
-Open `baseline-work.Rproj` and run the scripts in the `code/` folder to reproduce the results and figures.
+The study systematically examines how baseline model design choices influence probabilistic forecast evaluation metrics such as the Weighted Interval Score (WIS) and prediction interval coverage.
+
+Repository Structure
+baseline-work/
+│
+├── code/
+│   ├── model_fitting/
+│   │   ├── pull_cov_data_with_version.R
+│   │   ├── seasonal_baseline.R
+│   │   ├── run_covid_retro.R
+│   │   ├── run_flu_retro.R
+│   │   ├── run_ili_retro_redo.R
+│   │   ├── run_rsv_retro_as_of.R
+│   │   └── run_rsv_retro_final.R
+│   │
+│   └── making_plots/
+│       ├── figure_1.R
+│       ├── figure_2.R
+│       ├── figure_3.R
+│       ├── figure_4.R
+│       ├── table_1.R
+│       ├── S1.R
+│       ├── S2.R
+│       ├── S3.R
+│       ├── S4.R
+│       ├── S5_6.R
+│       ├── S7.R
+│       ├── S8.R
+│       └── S9.R
+│
+├── data/
+│   ├── covid/
+│   ├── Influenza/
+│   ├── rsv/
+│   ├── ili/
+│   └── locations.csv
+│
+├── results/        # Generated forecasts and evaluation metrics
+├── plots/          # Manuscript figures and tables
+├── renv/           # renv project library
+├── renv.lock       # Locked package versions
+└── baseline-work.Rproj
+Reproducibility and Environment Control
+
+This project uses renv for strict, project-local dependency management.
+
+All forecast evaluation was conducted using:
+
+R (version X.X.X)
+
+scoringutils version 1.2.2
+
+Each model-fitting script includes a reproducibility guard that:
+
+Ensures renv is initialized
+
+Activates the project-local environment
+
+Verifies that scoringutils is exactly version 1.2.2
+
+Stops execution if the environment is inconsistent
+
+This prevents accidental use of globally installed or updated package versions.
+
+Initial Setup (One Time Only)
+
+After cloning the repository, from the project root run:
+
+install.packages("renv")   # if not already installed
+renv::init()
+renv::install("scoringutils@1.2.2")
+renv::snapshot()
+
+After this initial setup, scripts can be run directly.
+
+If packages are missing or the environment needs to be restored:
+
+renv::restore()
+Execution Workflow
+Step 1 — (Optional) Refresh Archived COVID Data
+
+If needed, regenerate archived COVID-19 data by issue date:
+
+code/model_fitting/pull_cov_data_with_version.R
+
+This script retrieves historical forecast hub data required for retrospective simulation.
+
+Step 2 — Fit Models and Generate Evaluation Outputs
+
+Run the scripts in:
+
+code/model_fitting/
+
+Recommended order:
+
+run_covid_retro.R
+
+run_flu_retro.R
+
+run_rsv_retro_as_of.R
+
+run_rsv_retro_final.R
+
+run_ili_retro_redo.R
+
+Each script:
+
+Fits the baseline model
+
+Generates probabilistic forecasts
+
+Computes evaluation metrics (e.g., WIS, interval coverage)
+
+Automatically creates required output directories if missing
+
+Saves outputs to:
+
+results/<disease>/forecasts/
+results/<disease>/scores/
+
+Outputs are versioned by forecast issue date.
+
+Step 3 — Generate Figures and Tables (Sequential Order)
+
+After model fitting is complete, run the plotting scripts in the following order:
+
+code/making_plots/
+
+Recommended order:
+
+figure_1.R
+
+figure_2.R
+
+figure_3.R
+
+figure_4.R
+
+table_1.R
+
+S1.R
+
+S2.R
+
+S3.R
+
+S4.R
+
+S5_6.R
+
+S7.R
+
+S8.R
+
+S9.R
+
+Each script:
+
+Reads processed outputs from results/
+
+Generates a specific manuscript figure or table
+
+Saves output files to plots/
+
+Script names correspond directly to manuscript numbering.
+
+Data Notes
+
+COVID-19 and Influenza analyses use archived real-time hub data.
+
+RSV analyses include both real-time (“as-of”) and finalized data to assess the impact of data revisions.
+
+ILI analyses use finalized percent wILI values.
+
+The distinction between as-of and finalized data is particularly important for RSV due to substantial backfill and revision.
 
 ## Author
 
