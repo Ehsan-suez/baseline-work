@@ -1,4 +1,4 @@
-
+remotes::install_version("scoringutils", version = "1.2.2")
 library(dplyr)
 library(purrr)
 library(mgcv)

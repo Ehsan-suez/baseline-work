@@ -1,3 +1,4 @@
+remotes::install_version("scoringutils", version = "1.2.2")
 #this one uses as-of data
 library(dplyr)
 library(readr)
@@ -275,7 +276,7 @@ for (file_path in files) {
 }
 
 
-message("\n🎉 DONE: RSV baseline pipeline complete!")
+message("\n🎉 DONE: RSV baseline pipeline complete!!")
 
 
 ###below is to check with one score file for sanity check with some plotting

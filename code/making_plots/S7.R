@@ -1,42 +1,68 @@
-library(readr)
+# =========================
 flatline_sym_sqrt_10 <- read_csv("results/ili/flatline_sym_sqrt_10.csv")
 seasonal_gam_forecasts_all <- read_csv("results/seasonal/forecasts/seasonal_gam_forecasts_all.csv")
-combined_forecasts <- bind_rows(
-  flatline_sym_sqrt_10,
-  seasonal_gam_forecasts_all
+
+flat_dates <- unique(flatline_sym_sqrt_10$forecast_date)
+gam_dates  <- unique(seasonal_gam_forecasts_all$forecast_date)
+
+# Dates that match (intersection)
+matched_dates <- intersect(flat_dates, gam_dates)
+
+length(flat_dates)
+length(matched_dates)
+all(flat_dates %in% gam_dates)
+
+library(dplyr)
+
+# 1. Get common forecast dates
+common_dates <- intersect(
+  unique(flatline_sym_sqrt_10$forecast_date),
+  unique(seasonal_gam_forecasts_all$forecast_date)
 )
 
-truth_ili_seasonal <- read_csv("data/ili/truth_ili_seasonal.csv")
+# 2. Filter BOTH datasets to matching dates only
+flatline_matched <- flatline_sym_sqrt_10 %>%
+  filter(forecast_date %in% as.Date(common_dates))
 
-score_both <- covidHubUtils::score_forecasts(
-  forecasts           = combined_forecasts,
-  truth               = truth_ili_seasonal,
-  return_format       = "wide",
-  metrics             = c("wis", "interval_coverage"),
+seasonal_gam_matched <- seasonal_gam_forecasts_all %>%
+  filter(forecast_date %in% as.Date(common_dates))
+
+identical(
+  sort(unique(flatline_matched$forecast_date)),
+  sort(unique(seasonal_gam_matched$forecast_date))
+)
+
+# 3. Combine
+combined_forecasts <- bind_rows(
+  flatline_matched,
+  seasonal_gam_matched
+)
+
+# 4. Save as CSV
+write_csv(
+  combined_forecasts,
+  "results/seasonal/flatline_vs_seasonal_gam_matched_forecasts.csv"
+)
+
+truth_ili <- read_csv("data/ili/truth_ili.csv")
+
+library(covidHubUtils)
+
+scores_flatline_vs_seasonal <- score_forecasts(
+  forecasts = combined_forecasts,
+  truth = truth_ili,
+  metrics = c(
+    "abs_error",
+    "wis",
+    "wis_components",
+    "interval_coverage",
+    "quantile_coverage"
+  ),
+  return_format = "wide",
   use_median_as_point = TRUE
 )
 
-library(readr)
-flatline_sym_sqrt_10 <- read_csv("results/ili/flatline_sym_sqrt_10.csv")
-seasonal_gam_forecasts_all <- read_csv("results/seasonal/forecasts/seasonal_gam_forecasts_all.csv")
-combined_forecasts <- bind_rows(
-  flatline_sym_sqrt_10,
-  seasonal_gam_forecasts_all
-)
-
-truth_ili_seasonal <- read_csv("data/ili/truth_ili_seasonal.csv")
-
-score_both <- covidHubUtils::score_forecasts(
-  forecasts           = combined_forecasts,
-  truth               = truth_ili_seasonal,
-  return_format       = "wide",
-  metrics             = c("wis", "interval_coverage"),
-  use_median_as_point = TRUE
-)
-
-View(score_both)
-
-p1 <- score_both %>%
+p1 <- scores_flatline_vs_seasonal %>%
   dplyr::group_by(model, horizon) %>%
   dplyr::summarise(wis = mean(wis)) %>%
   scoringutils::plot_heatmap(metric = "wis", x = "horizon")
@@ -47,7 +73,7 @@ library(cowplot)
 # =========================
 # 1) Summarise exactly like before
 # =========================
-avg_h <- score_both %>%
+avg_h <- scores_flatline_vs_seasonal %>%
   group_by(model, horizon) %>%
   summarise(
     mean_wis = mean(wis, na.rm = TRUE),
@@ -144,4 +170,5 @@ ggsave(
   dpi = 400,
   bg = "white"
 )
+
 

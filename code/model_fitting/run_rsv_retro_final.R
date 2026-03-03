@@ -1,3 +1,4 @@
+remotes::install_version("scoringutils", version = "1.2.2")
 #uses final data from 2025-10-24 (time of analyzing)
 
 library(dplyr)
