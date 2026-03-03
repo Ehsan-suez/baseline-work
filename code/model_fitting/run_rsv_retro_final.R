@@ -1,4 +1,43 @@
-## 0. load libs
+## Project-local dependency bootstrap (renv)
+## - Keeps package versions isolated to this repo
+## - Avoids relying on globally installed package versions
+library(renv)
+
+## Only needed the first time
+# renv::init()
+# renv::install('scoringutils@1.2.2')
+# renv::snapshot()
+if (!file.exists("renv/activate.R")) {
+  stop(
+    "renv is not initialized for this project.\n",
+    "From the project root, run:\n",
+    "  install.packages('renv')\n",
+    "  renv::init()\n",
+    "  renv::install('scoringutils@1.2.2')\n",
+    "  renv::snapshot()\n"
+  )
+}
+source("renv/activate.R")
+
+required_scoringutils_version <- "1.2.2"
+if (!requireNamespace("scoringutils", quietly = TRUE)) {
+  stop(
+    "Package 'scoringutils' is missing from the renv library.\n",
+    "Run: renv::install('scoringutils@",
+    required_scoringutils_version,
+    "'); renv::snapshot()"
+  )
+}
+
+installed_scoringutils_version <- as.character(utils::packageVersion("scoringutils"))
+if (installed_scoringutils_version != required_scoringutils_version) {
+  stop(
+    "Expected scoringutils ", required_scoringutils_version,
+    " but found ", installed_scoringutils_version, ".\n",
+    "Run: renv::install('scoringutils@", required_scoringutils_version,
+    "'); renv::snapshot()"
+  )
+}
 
 library(dplyr)
 library(readr)

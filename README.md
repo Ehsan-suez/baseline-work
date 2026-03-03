@@ -19,12 +19,12 @@ baseline-work/
 ├── code/
 │   ├── model_fitting/
 │   │   ├── pull_cov_data_with_version.R
-│   │   ├── seasonal_baseline.R
 │   │   ├── run_covid_retro.R
 │   │   ├── run_flu_retro.R
-│   │   ├── run_ili_retro_redo.R
+│   │   ├── run_ili_retro.R
 │   │   ├── run_rsv_retro_as_of.R
-│   │   └── run_rsv_retro_final.R
+│   │   ├── run_rsv_retro_final.R
+│   │   └── run_rsv_retro_final.R seasonal_baseline.R
 │   │
 │   └── making_plots/
 │       ├── figure_1.R
