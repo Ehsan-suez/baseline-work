@@ -308,6 +308,10 @@ score_season_2022_2023 <- covidHubUtils::score_forecasts(
 
 # inspect if you like
 score_season_2022_2023
+
+dir.create("results/seasonal/forecasts", recursive = TRUE)
+dir.create("results/seasonal/scores", recursive = TRUE)
+
 # Save forecast + score to CSV
 readr::write_csv(
   rolling_forecasts_2022_23,
